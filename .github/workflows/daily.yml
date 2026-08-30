@@ -2,23 +2,27 @@ name: 每日爆款抓取
 
 on:
   schedule:
-    # 每天北京时间 8:00 自动执行 (UTC 0:00)
+    # 每天 UTC 0:00 = 北京时间 8:00
     - cron: '0 0 * * *'
-  workflow_dispatch: # 支持手动触发
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
-  fetch-and-build:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 安装 Python
+      - name: 设置 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -26,36 +30,19 @@ jobs:
       - name: 安装依赖
         run: pip install -r requirements.txt
 
-      - name: 抓取爆款内容
-        run: python fetch_daily.py
+      - name: 抓取 + AI总结 + 生成HTML
+        run: python run.py
 
-      - name: AI 总结
-        run: python ai_summarize.py
-
-      - name: 生成 HTML 工作台
-        run: python build_app.py
-
-      - name: 同步为首页
-        run: cp 工作台.html index.html && cp 工作台.html dashboard.html
-
-      - name: 提交更新
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add daily_data.json 工作台.html index.html dashboard.html
-          git diff --quiet && git diff --cached --quiet || git commit -m "每日更新: $(date -u -d '+8 hours' '+%Y-%m-%d') 爆款素材"
-          git push
-
-      - name: 配置 GitHub Pages
-        uses: actions/configure-pages@v5
+      - name: 复制为 index.html
+        run: cp 工作台.html index.html
 
       - name: 上传 Pages 产物
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: .
 
   deploy:
-    needs: fetch-and-build
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
